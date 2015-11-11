@@ -63,9 +63,9 @@ MIDDLEWARE_CLASSES = (
     'django.contrib.messages.middleware.MessageMiddleware',
 )
 
-ROOT_URLCONF = 'sideloader.urls'
+ROOT_URLCONF = 'sideloader.web.urls'
 
-WSGI_APPLICATION = 'sideloader.wsgi.application'
+WSGI_APPLICATION = 'sideloader.web.wsgi.application'
 
 TEMPLATE_DIRS = (
     abspath('templates'),
@@ -83,7 +83,7 @@ INSTALLED_APPS = (
     #'raven.contrib.django.raven_compat',
     'social.apps.django_app.default',
     'crispy_forms',
-    'sideloader',
+    'sideloader.web',
 )
 
 LOGGING = {

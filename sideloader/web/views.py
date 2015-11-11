@@ -14,7 +14,7 @@ from django.core.urlresolvers import reverse
 from django.http import HttpResponse
 from django.conf import settings
 
-from sideloader import forms, tasks, models
+from sideloader.web import forms, tasks, models
 
 
 def verifyHMAC(request, data=None):

@@ -52,9 +52,13 @@ def index(request):
     if request.user.is_superuser:
         builds = models.Build.objects.filter(state=0).order_by('-build_time')
         last_builds = models.Build.objects.filter(state__gt=0).order_by('-build_time')[:10]
+
+        requests = models.ServerRequest.objects.filter(provisioned=False).order_by('request_date')
     else:
         all_builds = models.Build.objects.filter(state=0).order_by('-build_time')
         last_builds = models.Build.objects.filter(state__gt=0, project__in=projects).order_by('-build_time')[:10]
+
+        requests = []
 
         builds = []
         for build in all_builds:
@@ -66,7 +70,8 @@ def index(request):
     return render(request, "index.html", {
         'builds': builds,
         'last_builds': last_builds,
-        'projects': projects
+        'projects': projects,
+        'requests': requests
     })
 
 @login_required

@@ -1,0 +1,64 @@
+{% extends "fragments/default.html" %}
+{% load crispy_forms_tags %}
+{% block navbar %}
+{% include "fragments/navbar.html" %}
+{% endblock %}
+
+{% block head %}
+<link href="/static/css/select2.css" rel="stylesheet"/>
+<link href="/static/css/select2-bootstrap.css" rel="stylesheet"/>
+{% endblock %}
+
+{% block content %}
+<div class="col-lg-9" id="formcontainer">
+    <h4 style="margin-bottom:10px">{% if stream %}Edit stream{% else %}Create stream{% endif %}</h4>
+    {% crispy form %}
+
+</div>
+{% endblock %}
+
+{% block script %}
+<script src="/static/js/select2.min.js"></script>
+<script>
+    $(function () {
+        $("#id_targets").select2({
+            placeholder: "Select deployments",
+            allowClear: true
+        })
+
+        var signoff = true;
+
+        function toggleSignoff(){
+            var signoff = !$("#id_require_signoff")[0].checked;
+            if (signoff) {
+                $("#div_id_signoff_list").hide();
+                $("#div_id_quorum").hide();
+            }
+            else {
+                $("#div_id_signoff_list").show();
+                $("#div_id_quorum").show();
+            }
+        }
+
+        function toggleNotify(){
+            var mode = $('#id_notify')[0].checked;
+            console.log(mode);
+
+            if (mode==1) {
+                // Server
+                $("#div_id_notify_list").show();
+            }
+            else if (mode==0){
+                // Stream
+                $("#div_id_notify_list").hide();
+            }
+        }
+
+        $("#id_require_signoff").click(toggleSignoff);
+        toggleSignoff();
+        
+        $('#id_notify').click(toggleNotify);
+        toggleNotify();
+    });
+</script>
+{% endblock %}

@@ -21,14 +21,20 @@
         <p>
           {% if requests %}
           <table class="table table-hover table-bordered table-condensed">
-            <thead><tr><th>Project</th><th>Requester</th><th>Specification</th><th>Date</th></tr></thead>
+            <thead><tr><th>Project</th><th>Requester</th><th>Type</th><th>Name</th><th>Specification</th><th>Date</th></tr></thead>
             <tbody>
               {% for request in requests %}
               <tr>
                 <td>{{ request.project }}</td>
-                <td></td>
-                <td></td>
-                <td></td>
+                <td>{{ request.requested_by }}</td>
+                <td>{{ request.inftype }}</td>
+                <td>{{ request.name }}</td>
+                <td>
+                  Cores: {{ request.cpus }}<br/>
+                  Memory: {{ request.memory }}GB<br/>
+                  Disk: {{ request.disk }}GB
+                </td>
+                <td>{{ request.request_date }}</td>
               </tr>
               {% endfor %}
             </tbody>

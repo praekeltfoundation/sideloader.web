@@ -4,9 +4,35 @@ from django.conf import settings
 from django.utils import timezone
 
 
+class Settings(models.Model):
+    # Sideloader settings
+    domain_suffix = models.CharField(max_length=255)
+    specter_key = models.CharField(max_length=255)
+    specter_secret = models.CharField(max_length=255)
+
+class Org(models.Model):
+    name = models.CharField(max_length=255, unique=True)
+    owners = models.ManyToManyField(settings.AUTH_USER_MODEL, blank=True)
+
+    slack_token = models.CharField(max_length=255)
+    slack_defautl_channel = models.CharField(max_length=255)
+    slack_host = models.CharField(max_length=255)
+
+    token = models.CharField(max_length=255)
+
+    specter_key = models.CharField(max_length=255)
+    specter_secret = models.CharField(max_length=255)
+
+    def __unicode__(self):
+        return self.name
+
+    def __str__(self):
+        return self.__unicode__().encode('utf-8', 'replace')
+
 class Project(models.Model):
     name = models.CharField(max_length=255, unique=True)
     allowed_users = models.ManyToManyField(settings.AUTH_USER_MODEL, blank=True)
+    org = models.ForeignKey(Org, blank=True, null=True)
 
     def __unicode__(self):
         return self.name

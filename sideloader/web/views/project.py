@@ -15,414 +15,60 @@ from django.http import HttpResponse
 from django.conf import settings
 
 from sideloader.web import forms, tasks, models
+from sideloader.web.views import SideloaderView, SideloaderFormView
 
 
-def verifyHMAC(request, data=None):
-    clientauth = request.META['HTTP_AUTHORIZATION']
-    sig = request.META['HTTP_SIG']
+class StreamCreate(SideloaderFormView):
+    template_name = 'stream/create_edit.html'
+    form_class = forms.StreamForm
 
-    if clientauth != settings.SPECTER_AUTHCODE:
-        return False
+    project = None
 
-    sign = [settings.SPECTER_AUTHCODE, request.method, request.path]
+    def renderData(self):
+        return {
+            'project': models.Project.objects.get(id=int(self.project))
+        }
 
-    if data:
-        sign.append(
-            hashlib.sha1(data).hexdigest()
-        )
+    def formSubmited(self, form):
+        s = form.save(commit=False)
+        s.project = self.project
+        s.save()
+        form.save_m2m()
 
-    mysig = hmac.new(
-        key = settings.SPECTER_SECRET,
-        msg = '\n'.join(sign),
-        digestmod = hashlib.sha1
-    ).digest()
-
-    return base64.b64encode(mysig) == sig
-
-def getProjects(request):
-    if request.user.is_superuser:
-        return models.Project.objects.all().order_by('name')
-    else:
-        return request.user.project_set.all().order_by('name')
-
-@login_required
-def index(request):
-    projects = getProjects(request)
-
-    if request.user.is_superuser:
-        builds = models.Build.objects.filter(state=0).order_by('-build_time')
-        last_builds = models.Build.objects.filter(state__gt=0).order_by('-build_time')[:10]
-
-        requests = models.ServerRequest.objects.filter(provisioned=False).order_by('request_date')
-    else:
-        all_builds = models.Build.objects.filter(state=0).order_by('-build_time')
-        last_builds = models.Build.objects.filter(state__gt=0, project__in=projects).order_by('-build_time')[:10]
-
-        requests = []
-
-        builds = []
-        for build in all_builds:
-            if build.project in projects:
-                builds.append(build)
-            else:
-                builds.append({'build_time': build.build_time, 'project': {'name': 'Private'}})
-
-    return render(request, "index.html", {
-        'builds': builds,
-        'last_builds': last_builds,
-        'projects': projects,
-        'requests': requests
-    })
-
-@login_required
-def accounts_profile(request):
-    if request.method == "POST":
-        form = forms.UserForm(request.POST, instance=request.user)
-
-        if form.is_valid():
-            user = form.save(commit=False)
-            user.set_password(form.cleaned_data['password'])
-            user.save()
-            return redirect('home')
-    else:
-        form = forms.UserForm(instance=request.user)
-
-    return render(request, "accounts_profile.html", {
-        'form': form,
-        'projects': getProjects(request)
-    })
-
-@login_required
-def manage_index(request):
-    if not request.user.is_superuser:
-        return redirect('home')
-
-    users = User.objects.all().order_by('username')
-    repos = models.PackageRepo.objects.all().order_by('name')
-
-    hives = []
-    for k, v in tasks.getClusterStatus().items():
-        v['hostname'] = k
-        hives.append({
-            'hostname': k,
-            'lastseen': time.ctime(v['lastseen']),
-            'status': v['status']
-        })
-
-    return render(request, "manage/index.html", {
-        'projects': getProjects(request),
-        'users': users,
-        'repos': repos,
-        'hives': hives
-    })
-
-@login_required
-def manage_create_repo(request):
-    if not request.user.is_superuser:
-        return redirect('home')
-
-    if request.method == "POST":
-        form = forms.PackageRepoForm(request.POST)
-        if form.is_valid():
-            release = form.save(commit=False)
-            release.save()
-
-            return redirect('manage_index')
-    else:
-        form = forms.PackageRepoForm()
-
-    return render(request, "manage/create_repo.html", {
-        'form': form,
-        'projects': getProjects(request),
-    })
-
-@login_required
-def manage_delete_repo(request, id):
-    repo = models.PackageRepo.objects.get(id=id)
-    repo.delete()
-
-    return redirect('manage_index')
-
-@login_required
-def server_index(request):
-    servers = models.Server.objects.all().order_by('last_checkin')
-    return render(request, "servers/index.html", {
-        'servers': servers,
-        'projects': getProjects(request)
-    })
-
-@login_required
-def server_log(request, id):
-    # Accepts stream target ID
-    target = models.Target.objects.get(id=id)
-
-    projects = getProjects(request)
-    d = {
-        'target': target,
-        'project': target.release.project,
-        'projects': projects
-    }
-
-    if (request.user.is_superuser) or (
-        target.release.project in request.user.project_set.all()):
-        d['target'] = target
-
-    return render(request, "servers/server_log.html", d)
-
-@login_required
-def release_index(request):
-    releases = models.ReleaseStream.objects.all()
-    return render(request, "releases/index.html", {
-        'releases': releases,
-        'projects': getProjects(request)
-    })
-
-@login_required
-def release_create(request):
-    if not request.user.is_superuser:
-        return redirect('home')
-
-    if request.method == "POST":
-        form = forms.ReleaseForm(request.POST)
-        if form.is_valid():
-            release = form.save(commit=False)
-            release.save()
-
-            return redirect('release_index')
-
-    else:
-        form = forms.ReleaseForm()
-
-    return render(request, 'releases/create_edit.html', {
-        'form': form,
-        'projects': getProjects(request)
-    })
-
-@login_required
-def release_edit(request, id):
-    if not request.user.is_superuser:
-        return redirect('home')
-
-    release = models.ReleaseStream.objects.get(id=id)
-    if request.method == "POST":
-        form = forms.ReleaseForm(request.POST, instance=release)
-
-        if form.is_valid():
-            release = form.save(commit=False)
-            release.save()
-
-            return redirect('release_index')
-
-    else:
-        form = forms.ReleaseForm(instance=release)
-
-    return render(request, 'releases/create_edit.html', {
-        'form': form, 
-        'release': release,
-        'projects': getProjects(request)
-    })
-
-@login_required
-def module_index(request):
-    if not request.user.is_superuser:
-        return redirect('home')
-
-    modules = models.ModuleManifest.objects.all()
-
-    return render(request, 'modules/index.html', {
-        'modules': modules,
-        'projects': getProjects(request)
-    })
-
-@login_required
-def module_create(request):
-    if not request.user.is_superuser:
-        return redirect('home')
-
-    if request.method == "POST":
-        form = forms.ModuleForm(request.POST)
-
-        if form.is_valid():
-            module = form.save(commit=False)
-            module.save()
-
-            return redirect('module_index')
-
-    else:
-        form = forms.ModuleForm()
-
-    return render(request, 'modules/create_edit.html', {
-        'form': form,
-        'projects': getProjects(request)
-    })
-
-@login_required
-def module_edit(request, id):
-    if not request.user.is_superuser:
-        return redirect('home')
-
-    module = models.ModuleManifest.objects.get(id=id)
-
-    if request.method == "POST":
-        form = forms.ModuleForm(request.POST, instance=module)
-
-        if form.is_valid():
-            module = form.save(commit=False)
-            module.save()
-
-            return redirect('module_index')
-
-    else:
-        form = forms.ModuleForm(instance=module)
-
-    return render(request, 'modules/create_edit.html', {
-        'form': form,
-        'projects': getProjects(request)
-    })
-
-@login_required
-def module_scheme(request, id):
-    module = models.ModuleManifest.objects.get(id=id)
-
-    return HttpResponse(module.structure,
-        content_type='application/json')
-
-@login_required
-def manifest_view(request, id):
-    release = models.ReleaseStream.objects.get(id=id)
-    project = release.project
-
-    if not((request.user.is_superuser) or (
-        project in request.user.project_set.all())):
-        return redirect('home')
-        
-    manifests = release.servermanifest_set.all()
-
-    return render(request, 'modules/manifest_view.html', {
-        'projects': getProjects(request),
-        'manifests': manifests,
-        'project': release.project,
-        'release': release
-    })
-
-@login_required
-def manifest_delete(request, id):
-    manifest = models.ServerManifest.objects.get(id=id)
-    release = manifest.release
-    project = release.project
-
-    if not((request.user.is_superuser) or (
-        project in request.user.project_set.all())):
-        return redirect('home')
-        
-    manifest.delete()
-
-    return redirect('manifest_view', id=release.id)
-
-@login_required
-def manifest_add(request, id):
-    release = models.ReleaseStream.objects.get(id=id)
-    project = release.project
-
-    if not((request.user.is_superuser) or (
-        project in request.user.project_set.all())):
-        return redirect('home')
-        
-    if request.method == "POST":
-        form = forms.ManifestForm(request.POST)
-
-        if form.is_valid():
-            manifest = form.save(commit=False)
-            manifest.release = release
-            manifest.save()
-
-            return redirect('manifest_view', id=release.id)
-
-    else:
-        form = forms.ManifestForm()
-
-    return render(request, 'modules/manifest_edit.html', {
-        'form': form,
-        'release': release,
-        'projects': getProjects(request),
-        'project': release.project
-    })
-
-@login_required
-def manifest_edit(request, id):
-    manifest = models.ServerManifest.objects.get(id=id)
-    project = manifest.release.project
-
-    if not((request.user.is_superuser) or (
-        project in request.user.project_set.all())):
-        return redirect('home')
-        
-    if request.method == "POST":
-        form = forms.ManifestForm(request.POST, instance=manifest)
-
-        if form.is_valid():
-            manifest = form.save(commit=False)
-            manifest.save()
-
-            return redirect('manifest_view', id=manifest.release.id)
-    else:
-        form = forms.ManifestForm(instance=manifest)
-
-    return render(request, 'modules/manifest_edit.html', {
-        'form': form,
-        'projects': getProjects(request),
-        'project': project
-    })
-
-@login_required
-def stream_create(request, project):
-    p = models.Project.objects.get(id=project)
-
-    if request.method == "POST":
-        form = forms.StreamForm(request.POST)
-        if form.is_valid():
-            s = form.save(commit=False)
-
-            s.project = p 
-            s.save()
-            form.save_m2m()
-
-            return redirect('projects_view', id=project)
-    else:
-        form = forms.StreamForm()
+        return self.redirect('projects_view', id=project)
+    
+    def setupForm(self, form):
+        p = models.Project.objects.get(id=int(self.project))
         form.fields['targets'].queryset = p.target_set.all().order_by('description')
         form.fields['repo'].queryset = p.repo_set.all().order_by('github_url')
 
-    return render(request, 'stream/create_edit.html', {
-        'form': form,
-        'project': p,
-        'projects': getProjects(request)
-    })
+class StreamEdit(SideloaderFormView):
+    template_name = 'stream/create_edit.html'
+    form_class = forms.StreamForm
 
-@login_required
-def stream_edit(request, id):
-    stream = models.Stream.objects.get(id=id)
+    id = None
 
-    if request.method == "POST":
-        form = forms.StreamForm(request.POST, instance=stream)
+    def getObject(self):
+        print self.kwargs
+        return models.Stream.objects.get(id=int(self.id))
 
-        if form.is_valid():
-            stream = form.save(commit=False)
-            stream.save()
-            form.save_m2m()
+    def renderData(self):
+        stream = self.getObject()
+        return {
+            'stream': stream,
+            'project': stream.project
+        }
 
-            return redirect('projects_view', id=stream.repo.project.id)
+    def formSubmitted(self, form):
+        stream = form.save(commit=False)
+        stream.save()
+        form.save_m2m()
 
-    else:
-        form = forms.StreamForm(instance=stream)
+        return self.redirect('projects_view', id=stream.repo.project.id)
+
+    def setupForm(self, form):
+        stream = self.getObject()
         form.fields['targets'].queryset = stream.project.target_set.all().order_by('description')
-
-    return render(request, 'stream/create_edit.html', {
-        'form': form, 
-        'stream': stream,
-        'project': stream.repo.project,
-        'projects': getProjects(request)
-    })
 
 @login_required
 def stream_delete(request, id):
@@ -557,48 +203,49 @@ def build_view(request, id):
 
     return render(request, 'projects/build_view.html', d)
 
-@login_required
-def projects_view(request, id):
+class ProjectView(SideloaderView):
+    template_name = 'projects/view.html'
+    id = None
 
-    project = models.Project.objects.get(id=id)
+    def renderData(self):
+        project = models.Project.objects.get(id=int(self.id))
 
-    if (request.user.is_superuser) or (project in request.user.project_set.all()):
-        repos = project.repo_set.all().order_by('github_url')
+        if self.hasProjectPermission(project):
+            repos = project.repo_set.all().order_by('github_url')
 
-        builds = []
-        streams = []
-        releases = []
+            builds = []
+            streams = []
+            releases = []
 
-        for repo in repos:
-            builds.extend(repo.build_set.all().order_by('-build_time'))
-            streams.extend(repo.stream_set.all().order_by('name'))
+            for repo in repos:
+                builds.extend(repo.build_set.all().order_by('-build_time'))
+                streams.extend(repo.stream_set.all().order_by('name'))
 
-        for stream in streams:
-            releases.extend(stream.release_set.all().order_by(
-                '-release_date'))
+            for stream in streams:
+                releases.extend(stream.release_set.all().order_by(
+                    '-release_date'))
 
-        releases.sort(key=lambda r: r.release_date)
+            releases.sort(key=lambda r: r.release_date)
 
-        builds.sort(key=lambda r: r.build_time)
+            builds.sort(key=lambda r: r.build_time)
 
-        streams.sort(key=lambda r: r.name)
+            streams.sort(key=lambda r: r.name)
 
-        requests = project.serverrequest_set.filter(approval=0).order_by('request_date')
+            requests = project.serverrequest_set.filter(approval=0).order_by('request_date')
 
-        d = {
-            'project': project,
-            'repos': repos,
-            'targets': project.target_set.all().order_by('description'),
-            'builds': reversed(builds),
-            'streams': streams,
-            'releases': reversed(releases[-5:]),
-            'projects': getProjects(request),
-            'requests': requests
-        }
-    else:
-        d = {}
+            d = {
+                'project': project,
+                'repos': repos,
+                'targets': project.target_set.all().order_by('description'),
+                'builds': reversed(builds),
+                'streams': streams,
+                'releases': reversed(releases[-5:]),
+                'requests': requests
+            }
+        else:
+            d = {}
 
-    return render(request, 'projects/view.html', d)
+        return d
 
 @login_required
 def project_graph(request, id):

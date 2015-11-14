@@ -74,9 +74,8 @@ class SideloaderFormView(PageMixin, FormView):
         pass
 
     def get_context_data(self, **kwargs):
-        context = super(SideloaderFormView, self).get_context_data(**kwargs)
-
         self.updateArgs()
+        context = super(SideloaderFormView, self).get_context_data(**kwargs)
 
         # Merge context data
         self.projects = self.getProjects()
@@ -92,11 +91,13 @@ class SideloaderFormView(PageMixin, FormView):
 
         return context
 
-    def get_initial(self):
+    def get_form_kwargs(self):
+        kwargs = super(SideloaderFormView, self).get_form_kwargs()
+        self.updateArgs()
         if hasattr(self, 'getObject'):
-            self.updateArgs()
-            return self.getObject()
-        
+            kwargs.update({'instance': self.getObject()})
+        return kwargs
+
     def setupForm(self, form):
         pass
 

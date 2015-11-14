@@ -49,7 +49,6 @@ class StreamEdit(SideloaderFormView):
     id = None
 
     def getObject(self):
-        print self.kwargs
         return models.Stream.objects.get(id=int(self.id))
 
     def renderData(self):

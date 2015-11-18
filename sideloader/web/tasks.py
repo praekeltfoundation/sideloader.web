@@ -7,5 +7,8 @@ def build(build):
 
     return c.queue('sideloader', 'build', {})
 
+def pushRelease(build_id, flow, scheduled=None):
+    pass
+
 def getClusterStatus():
     return RhumbaClient().clusterStatus()

@@ -6,15 +6,15 @@ import hashlib, hmac, base64
 import time
 import yaml
 
-from django.shortcuts import render, redirect
+from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
 from django.views.decorators.csrf import csrf_exempt
 from django.core.urlresolvers import reverse
-from django.http import HttpResponse
+from django.http import HttpResponse, Http404
 from django.conf import settings
 
-from django.views.generic.base import TemplateView
+from django.views.generic.base import TemplateView, RedirectView, View
 from django.views.generic.edit import FormView
 
 from sideloader.web import forms, tasks, models
@@ -29,6 +29,22 @@ class PageMixin(object):
     def hasProjectPermission(self, project):
         return (self.request.user.is_superuser) or (
             project in self.request.user.project_set.all())
+
+    def getObjectIfAllowed(self, model, **kwargs):
+        obj = get_object_or_404(model, pk=kwargs['id'])
+
+        if not self.hasProjectPermission(obj.project):
+            raise Http404('Not found')
+
+        return obj
+
+    def getProject(self, id):
+        project = get_object_or_404(models.Project, pk=id)
+
+        if not self.hasProjectPermission(project):
+            raise Http404('Not found')
+
+        return project
 
     def updateArgs(self):
         for k, v in self.kwargs.items():
@@ -59,8 +75,9 @@ class SideloaderView(PageMixin, TemplateView):
 
         data = self.renderData()
 
-        for k, v in data.items():
-            context[k] = v
+        if data:
+            for k, v in data.items():
+                context[k] = v
 
         return context
 
@@ -85,9 +102,9 @@ class SideloaderFormView(PageMixin, FormView):
         self.setupForm(context['form'])
 
         data = self.renderData()
-
-        for k, v in data.items():
-            context[k] = v
+        if data:
+            for k, v in data.items():
+                context[k] = v
 
         return context
 
@@ -100,6 +117,46 @@ class SideloaderFormView(PageMixin, FormView):
 
     def setupForm(self, form):
         pass
+
+class SideloaderDeleteView(PageMixin, RedirectView):
+
+    def redirect(self, obj):
+        project = obj.project
+        return reverse('projects_view', id=project.id)
+
+    def get_redirect_url(self, *a, **kw):
+        self.updateArgs()
+        obj = get_object_or_404(self.model, pk=kwargs['id'])
+
+        r = self.redirect(obj)
+
+        if self.hasProjectPermission(obj.project):
+            obj.delete()
+        
+        return r
+
+class SideloaderRedirectView(PageMixin, RedirectView):
+
+    def redirect(self):
+        pass
+
+    def get_redirect_url(self, *a, **kw):
+        self.updateArgs()
+        
+        return self.redirect()
+
+class SideloaderJSONView(PageMixin, View):
+
+    def getData(self):
+        pass
+
+    def get(self, request, *args, **kwargs):
+        self.updateArgs()
+
+        data = self.getData()
+
+        return HttpResponse(json.dumps(data),
+                            content_type='application/json')
 
 class APIMixin(object):
     def verifyHMAC(request, data=None):

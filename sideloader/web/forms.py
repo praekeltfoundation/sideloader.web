@@ -207,6 +207,13 @@ class StreamForm(BaseModelForm):
             'signoff_list', 'notify', 'notify_list',
         )
 
+class ReleasePushForm(BaseModelForm):
+    tz = forms.CharField(widget=forms.HiddenInput())
+
+    class Meta:
+        model = models.Release
+        exclude = ('release_date', 'flow', 'build', 'waiting')
+
 #class ModuleForm(BaseModelForm):
 #    class Meta:
 #        model = models.ModuleManifest

@@ -7,13 +7,32 @@
   <h4>Projects</h4>
   <input placeholder="Search Projects" id="box" type="text" />
   <br/>
-  <ul class="nav nav-sidebar nav-search">
+  <div class="nav-sidebar nav-search panel-group" id="navaccordion" role="tablist" aria-multiselectable="true">
     {% for p in projects %}
-    <li {% if p.id == project.id %}class="active"{% endif %}>
-        <a href="{% url 'projects_view' id=p.id %}">&nbsp;&nbsp;{{ p.name }}</a>
-    </li>
+    <div class="panel panel-default">
+      <div class="panel-heading" role="tab" id="h{{p.id}}">
+      <h4 class="panel-title">
+        <a role="button" {% if p.id == project.id %}class="active" aria-expanded="true"{% else %}aria-expanded="false"{% endif %} href="#c{{p.id}}" data-toggle="collapse" data-parent="#navaccordion" aria-controls="c{{p.id}}">
+          {{ p.name }}
+        </a>
+      </h4></div>
+      <div id="c{{p.id}}" class="panel-collapse collapse{% if p.id == project.id %} in{% endif %}" role="tabpanel" aria-labelledby="h{{p.id}}">
+        <div class="panel-body">
+          <ul class="nav nav-sidebar">
+            <li>
+            <a href="{% url 'projects_deploy_view' id=p.id %}">&nbsp;&nbsp;Build workflows</a>
+            </li>
+            <li>
+            <a href="{% url 'projects_resource_view' id=p.id %}">&nbsp;&nbsp;Resources</a>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
     {% endfor %} 
-  </ul>
+  </div>
+
 </div>
 
 <script>
@@ -22,9 +41,10 @@
 
             var valThis = $(this).val().toLowerCase();
 
-            $('.nav-search>li').each(function(){
+            $('.nav-search>.panel>.panel-heading>.panel-title>a').each(function(){
                 var text = $(this).text().toLowerCase();
-                (text.indexOf(valThis) != -1) ? $(this).show() : $(this).hide();            
+                var par = $(this).parent().parent().parent();
+                (text.indexOf(valThis) != -1) ? par.show() : par.hide();            
             });
         });
     });

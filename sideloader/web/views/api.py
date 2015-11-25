@@ -15,7 +15,8 @@ from django.http import HttpResponse, Http404
 
 from django.conf import settings
 
-from sideloader.web import forms, tasks, models
+from sideloader.web import forms, tasks
+from sideloader.db import models
 
 @csrf_exempt
 def api_build(request, hash):

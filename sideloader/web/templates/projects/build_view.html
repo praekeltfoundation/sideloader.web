@@ -9,7 +9,7 @@
     <div class="col-lg-9">
         <h4>Build log</h4>
         <p>
-            <strong>Name:</strong> <a href="{% url 'projects_view' id=build.project.id %}">{{ build.project.name }}</a>
+            <strong>Name:</strong> <a href="{% url 'projects_deploy_view' id=build.project.id %}">{{ build.project.name }}</a>
         </p>
     </div>
 {% endif %}

@@ -83,6 +83,7 @@ INSTALLED_APPS = (
     #'raven.contrib.django.raven_compat',
     'social.apps.django_app.default',
     'crispy_forms',
+    'sideloader.db',
     'sideloader.web',
 )
 

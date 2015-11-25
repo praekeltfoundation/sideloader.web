@@ -5,7 +5,7 @@ from django import forms
 from crispy_forms.helper import FormHelper
 from crispy_forms.layout import Submit
 
-import models
+from sideloader.db import models
 
 
 class BaseModelForm(forms.ModelForm):

@@ -14,8 +14,8 @@ urlpatterns = patterns('',
     # Projects
     url(r'^projects/create$', project.ProjectCreate.as_view(), name='projects_create'),
     url(r'^projects/edit/(?P<id>[\d]+)$', project.ProjectEdit.as_view(), name='projects_edit'),
-    url(r'^projects/view/(?P<id>[\d]+)$', project.ProjectView.as_view(), name='projects_view'),
-    url(r'^projects/build/(?P<id>[\d]+)$', project.ProjectBuild.as_view(), name='projects_build'),
+    url(r'^projects/deploys/(?P<id>[\d]+)$', project.ProjectDeployView.as_view(), name='projects_deploy_view'),
+    url(r'^projects/resources/(?P<id>[\d]+)$', project.ProjectResourceView.as_view(), name='projects_resource_view'),
     url(r'^projects/delete/(?P<id>[\d]+)$', project.ProjectDelete.as_view(), name='projects_delete'),
     url(r'^projects/server/request/(?P<project>[\d]+)$', project.ServerRequest.as_view(), name='server_request'),
     url(r'^projects/graph/(?P<id>[\d]+)$', project.ProjectGraph.as_view(), name='project_graph'),
@@ -37,6 +37,7 @@ urlpatterns = patterns('',
     url(r'^stream/suck/(?P<id>[\d]+)$', project.ReleaseDelete.as_view(), name='release_delete'),
     url(r'^stream/push/(?P<flow>[\d]+)/(?P<build>[\d]+)$', project.StreamPush.as_view(), name='stream_push'),
     url(r'^stream/schedule/(?P<flow>[\d]+)/(?P<build>[\w-]+)$', project.StreamSchedule.as_view(), name='stream_schedule'),
+    url(r'^stream/build/(?P<id>[\d]+)$', project.ProjectBuild.as_view(), name='stream_build'),
 
     # Targets
     url(r'^deploy/create/(?P<project>[\d]+)$', project.DeployCreate.as_view(), name='target_create'),

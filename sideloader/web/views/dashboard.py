@@ -1,5 +1,5 @@
 from sideloader.web.views import SideloaderView
-from sideloader.web import models
+from sideloader.db import models
 
 
 class DashboardView(SideloaderView):

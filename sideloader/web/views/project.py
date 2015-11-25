@@ -13,164 +13,14 @@ from django.views.decorators.csrf import csrf_exempt
 from django.core.urlresolvers import reverse
 from django.http import HttpResponse, Http404
 
-from django.conf import settings
-
-from sideloader.web import forms, tasks, models
+from sideloader.web import forms, tasks
+from sideloader.db import models
 from sideloader.web.views import (SideloaderView, SideloaderFormView,
     SideloaderDeleteView, SideloaderRedirectView, SideloaderJSONView)
 
 
-class StreamCreate(SideloaderFormView):
-    template_name = 'stream/create_edit.html'
-    form_class = forms.StreamForm
-
-    project = None
-
-    def renderData(self):
-        return {
-            'project': models.Project.objects.get(id=int(self.project))
-        }
-
-    def formSubmited(self, form):
-        s = form.save(commit=False)
-        s.project = self.project
-        s.save()
-        form.save_m2m()
-
-        return self.redirect('projects_view', id=project)
-    
-    def setupForm(self, form):
-        p = models.Project.objects.get(id=int(self.project))
-        form.fields['targets'].queryset = p.target_set.all().order_by('description')
-        form.fields['repo'].queryset = p.repo_set.all().order_by('github_url')
-
-class StreamEdit(SideloaderFormView):
-    template_name = 'stream/create_edit.html'
-    form_class = forms.StreamForm
-
-    id = None
-
-    def getObject(self):
-        return models.Stream.objects.get(id=int(self.id))
-
-    def renderData(self):
-        stream = self.getObject()
-        return {
-            'stream': stream,
-            'project': stream.project
-        }
-
-    def formSubmitted(self, form):
-        stream = form.save(commit=False)
-        stream.save()
-        form.save_m2m()
-
-        return self.redirect('projects_view', id=stream.repo.project.id)
-
-    def setupForm(self, form):
-        stream = self.getObject()
-        form.fields['targets'].queryset = stream.project.target_set.all().order_by('description')
-
-class StreamDelete(SideloaderDeleteView):
-    model = models.Stream
-        
-class StreamPush(SideloaderRedirectView):
-    flow = None
-    build = None
-
-    def redirect(self):
-        flow = models.ReleaseStream.objects.get(id=self.flow)
-        project = flow.project
-        if self.hasProjectPermission(project):
-            tasks.pushRelease(self.build, flow)
-            
-        return redirect('projects_view', id=project.id)
-
-class StreamSchedule(SideloaderFormView):
-    flow = None
-    build = None
-
-    template_name = 'stream/schedule.html'
-    form_class = forms.ReleasePushForm
-
-    def renderData(self):
-        flow = models.ReleaseStream.objects.get(id=self.flow)
-        build = models.Build.objects.get(id=self.build)
-        return {
-            'project': flow.project,
-            'flow': flow,
-            'build': build,
-        }
-
-    def formSubmitted(self, form):
-        flow = models.ReleaseStream.objects.get(id=self.flow)
-        release = form.cleaned_data
-
-        schedule = release['scheduled'] + timedelta(hours=int(release['tz']))
-
-        tasks.pushRelease(self.build, flow, scheduled=schedule)
-        
-        return redirect('projects_view', id=flow.project.id)
-
-class DeployCreate(SideloaderFormView):
-    project = None
-    template_name = 'target/create_edit.html'
-    form_class = forms.TargetForm
-
-    def renderData(self):
-        project = models.Project.objects.get(id=project)
-        return {'project': project}
-
-    def formSubmitted(self, form):
-        target = form.save(commit=False)
-        target.project = project
-        target.save()
-
-        return self.redirect('projects_view', id=project.id)
-
-class DeployEdit(SideloaderFormView):
-    template_name = 'target/create_edit.html'
-    form_class = forms.StreamForm
-
-    id = None
-
-    def getObject(self):
-        return self.getObjectIfAllowed(models.Target, id=int(self.id))
-
-    def renderData(self):
-        target = self.getObject()
-        return {
-            'target': target,
-            'project': stream.project
-        }
-
-    def formSubmitted(self, form):
-        target = form.save(commit=False)
-        target.save()
-
-        return self.redirect('projects_view', id=target.project.id)
-
-class DeployDelete(SideloaderDeleteView):
-    model = models.Target
-
-class ReleaseDelete(SideloaderDeleteView):
-    model = models.Release
-
-class BuildView(SideloaderView):
-    template_name =  'projects/build_view.html'
-    id = None
-
-    def renderData(self):
-        build = self.getObjectIfAllowed(models.Build, id=int(self.id))
-
-        return {
-            'build': build,
-            'project': build.project
-        }
-            
-
-class ProjectView(SideloaderView):
-    template_name = 'projects/view.html'
+class ProjectDeployView(SideloaderView):
+    template_name = 'projects/deployment.html'
     id = None
 
     def renderData(self):
@@ -196,8 +46,6 @@ class ProjectView(SideloaderView):
 
         streams.sort(key=lambda r: r.name)
 
-        requests = project.serverrequest_set.filter(approval=0).order_by('request_date')
-
         return {
             'project': project,
             'repos': repos,
@@ -205,6 +53,19 @@ class ProjectView(SideloaderView):
             'builds': reversed(builds),
             'streams': streams,
             'releases': reversed(releases[-5:]),
+        }
+
+class ProjectResourceView(SideloaderView):
+    template_name = 'projects/resources.html'
+    id = None
+
+    def renderData(self):
+        project = self.getProject(self.id)
+
+        requests = project.serverrequest_set.filter(approval=0).order_by('request_date')
+
+        return {
+            'project': project,
             'requests': requests
         }
 
@@ -244,24 +105,16 @@ class ProjectGraph(SideloaderJSONView):
 
         return data
 
-
-class ProjectDelete(SideloaderDeleteView):
-    mode = models.Project
-
-    def redirect(self, obj):
-        return reverse('home')
-
-
 class ProjectCreate(SideloaderFormView):
     template_name = 'projects/create_edit.html'
     form_class = forms.ProjectForm
 
-    def formSubmitted(self, form):
+    def formSubmited(self, form):
         project = form.save(commit=False)
         project.save()
         form.save_m2m()
 
-        return redirect('projects_view', id=project.id)
+        return redirect('projects_deploy_view', id=project.id)
 
 class ProjectEdit(SideloaderFormView):
     template_name = 'projects/create_edit.html'
@@ -270,12 +123,12 @@ class ProjectEdit(SideloaderFormView):
     def getObject(self):
         return self.getProject(kwargs['id'])
 
-    def formSubmitted(self, form):
+    def formSubmited(self, form):
         project = form.save(commit=False)
         project.save()
         form.save_m2m()
 
-        return redirect('projects_view', id=project.id)
+        return redirect('projects_deploy_view', id=project.id)
 
     def renderData(self):
         project = self.getObject()
@@ -283,13 +136,168 @@ class ProjectEdit(SideloaderFormView):
             'project': project
         }
 
+class ProjectDelete(SideloaderDeleteView):
+    mode = models.Project
+
+    def redirect(self, obj):
+        return reverse('home')
+
+class StreamCreate(SideloaderFormView):
+    template_name = 'stream/create_edit.html'
+    form_class = forms.StreamForm
+
+    project = None
+
+    def renderData(self):
+        return {
+            'project': models.Project.objects.get(id=int(self.project))
+        }
+
+    def formSubmited(self, form):
+        s = form.save(commit=False)
+        s.project = self.project
+        s.save()
+        form.save_m2m()
+
+        return self.redirect('projects_deploy_view', id=project)
+    
+    def setupForm(self, form):
+        p = models.Project.objects.get(id=int(self.project))
+        form.fields['targets'].queryset = p.target_set.all().order_by('description')
+        form.fields['repo'].queryset = p.repo_set.all().order_by('github_url')
+
+class StreamEdit(SideloaderFormView):
+    template_name = 'stream/create_edit.html'
+    form_class = forms.StreamForm
+
+    id = None
+
+    def getObject(self):
+        return models.Stream.objects.get(id=int(self.id))
+
+    def renderData(self):
+        stream = self.getObject()
+        return {
+            'stream': stream,
+            'project': stream.project
+        }
+
+    def formSubmited(self, form):
+        stream = form.save(commit=False)
+        stream.save()
+        form.save_m2m()
+
+        return self.redirect('projects_deploy_view', id=stream.repo.project.id)
+
+    def setupForm(self, form):
+        stream = self.getObject()
+        form.fields['targets'].queryset = stream.project.target_set.all().order_by('description')
+
+class StreamDelete(SideloaderDeleteView):
+    model = models.Stream
+        
+class StreamPush(SideloaderRedirectView):
+    flow = None
+    build = None
+
+    def redirect(self):
+        flow = models.ReleaseStream.objects.get(id=self.flow)
+        project = flow.project
+        if self.hasProjectPermission(project):
+            tasks.pushRelease(self.build, flow)
+            
+        return redirect('projects_deploy_view', id=project.id)
+
+class StreamSchedule(SideloaderFormView):
+    flow = None
+    build = None
+
+    template_name = 'stream/schedule.html'
+    form_class = forms.ReleasePushForm
+
+    def renderData(self):
+        flow = models.ReleaseStream.objects.get(id=self.flow)
+        build = models.Build.objects.get(id=self.build)
+        return {
+            'project': flow.project,
+            'flow': flow,
+            'build': build,
+        }
+
+    def formSubmited(self, form):
+        flow = models.ReleaseStream.objects.get(id=self.flow)
+        release = form.cleaned_data
+
+        schedule = release['scheduled'] + timedelta(hours=int(release['tz']))
+
+        tasks.pushRelease(self.build, flow, scheduled=schedule)
+        
+        return redirect('projects_deploy_view', id=flow.project.id)
+
+class DeployCreate(SideloaderFormView):
+    project = None
+    template_name = 'target/create_edit.html'
+    form_class = forms.TargetForm
+
+    def renderData(self):
+        project = models.Project.objects.get(id=project)
+        return {'project': project}
+
+    def formSubmited(self, form):
+        target = form.save(commit=False)
+        target.project = project
+        target.save()
+
+        return self.redirect('projects_deploy_view', id=project.id)
+
+class DeployEdit(SideloaderFormView):
+    template_name = 'target/create_edit.html'
+    form_class = forms.StreamForm
+
+    id = None
+
+    def getObject(self):
+        return self.getObjectIfAllowed(models.Target, id=int(self.id))
+
+    def renderData(self):
+        target = self.getObject()
+        return {
+            'target': target,
+            'project': stream.project
+        }
+
+    def formSubmited(self, form):
+        target = form.save(commit=False)
+        target.save()
+
+        return self.redirect('projects_deploy_view', id=target.project.id)
+
+class DeployDelete(SideloaderDeleteView):
+    model = models.Target
+
+class ReleaseDelete(SideloaderDeleteView):
+    model = models.Release
+
+class BuildView(SideloaderView):
+    template_name =  'projects/build_view.html'
+    id = None
+
+    def renderData(self):
+        build = self.getObjectIfAllowed(models.Build, id=int(self.id))
+
+        return {
+            'build': build,
+            'project': build.project
+        }
+            
+
 class ServerRequest(SideloaderFormView):
     form_class = forms.ServerRequestForm
     template_name = 'projects/server_request.html'
 
     id = None
 
-    def formSubmitted(self, form):
+    def formSubmited(self, form):
         project = self.getProject(self.id)
 
         server = form.save(commit=False)
@@ -297,7 +305,7 @@ class ServerRequest(SideloaderFormView):
         server.project = project
         server.save()
 
-        return redirect('projects_view', id=project.id)
+        return redirect('projects_resource_view', id=project.id)
 
     def renderData(self):
         project = self.getProject(self.id)
@@ -307,15 +315,16 @@ class ServerRequest(SideloaderFormView):
 class RepoEdit(SideloaderFormView):
     form_class = forms.RepoForm
     template_name = 'repo/create_edit.html'
+    id = None
 
     def getObject(self):
         return self.getObjectIfAllowed(models.Repo, id=int(self.id))
 
-    def formSubmitted(self, form):
+    def formSubmited(self, form):
         repo = form.save(commit=False)
         repo.save()
 
-        return redirect('projects_view', id=id)
+        return redirect('projects_deploy_view', id=self.id)
 
     def renderData(self):
         repo = self.getObject()
@@ -334,7 +343,7 @@ class RepoCreate(SideloaderFormView):
 
     project = None
 
-    def formSubmitted(self, form):
+    def formSubmited(self, form):
         project = models.Project.objects.get(id=int(self.project))
 
         repo = form.save(commit=False)
@@ -343,7 +352,7 @@ class RepoCreate(SideloaderFormView):
         repo.project = project
         repo.save()
 
-        return redirect('projects_view', id=project.id)
+        return redirect('projects_deploy_view', id=project.id)
 
     def renderData(self):
         project = models.Project.objects.get(id=int(self.project))

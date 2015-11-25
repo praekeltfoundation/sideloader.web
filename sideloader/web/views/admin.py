@@ -16,7 +16,8 @@ from django.conf import settings
 
 from django.views.generic.base import TemplateView
 
-from sideloader.web import forms, tasks, models
+from sideloader.web import forms, tasks
+from sideloader.db import models
 
 
 @login_required

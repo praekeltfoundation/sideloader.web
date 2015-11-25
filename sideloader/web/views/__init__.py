@@ -17,7 +17,9 @@ from django.conf import settings
 from django.views.generic.base import TemplateView, RedirectView, View
 from django.views.generic.edit import FormView
 
-from sideloader.web import forms, tasks, models
+from sideloader.web import forms, tasks
+
+from sideloader.db import models
 
 
 class PageMixin(object):
